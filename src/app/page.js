@@ -32,26 +32,51 @@ const switchToSepolia = async () => {
   }
 };
 
+const simulate = async (account, msg) => {
+  try {
+    await client.simulateContract({
+      address: contractAddress,
+      abi: contractAbi,
+      functionName: 'setMessage',
+      args: [msg],
+      account,
+    });
+    return { status: "success" };
+  } catch (err) {
+    return { status: err.shortMessage };
+  }
+};
+
 const write = async (account, msg) => {
 
-  const walletClient = createWalletClient({
-    chain: sepolia,
-    transport: custom(window.ethereum),
-  });
+  try {
+    const walletClient = createWalletClient({
+      chain: sepolia,
+      transport: custom(window.ethereum),
+    });
 
-  return await walletClient.writeContract({
-    address: contractAddress,
-    abi: contractAbi,
-    functionName: 'setMessage',
-    args: [msg],
-    account, 
-  });
+    return await walletClient.writeContract({
+      address: contractAddress,
+      abi: contractAbi,
+      functionName: 'setMessage',
+      args: [msg],
+      account, 
+    });
+  }
+  catch (e) {
 
+  }
+
+}
+
+const getReceipt = async (hash) => {
+  return await client.waitForTransactionReceipt({ hash });
 }
 
 export default function Home() {
 
   const [result, setResult] = useState(null);
+  const [error, setError] = useState(null);
   const inputRef = useRef(null);
 
   useEffect(() => {
@@ -64,13 +89,46 @@ export default function Home() {
 
   const onClick = () => {
 
-    getAccount().then((data1) => {
-      
-      switchToSepolia().then(() => {
-        write(data1[0], inputRef.current.value);
-      })
+    try {
 
-    });
+      getAccount().then((data1) => {
+        
+        switchToSepolia().then(() => {
+
+          simulate(data1[0], inputRef.current.value).then((status) => {
+            
+            if (status.status === "success") {
+              write(data1[0], inputRef.current.value).then((hash) => {
+                
+                getReceipt(hash).then((receipt) => {
+
+                  setError(receipt.status);
+
+                  if (receipt.status === "success") {
+                    getMessage().then((data) => {
+                      setResult(data);
+                    });
+                  }
+
+                })
+    
+              })
+            }
+            else {
+              setError(status.status);
+            }
+
+          })
+
+        })
+
+      });
+
+    }
+
+    catch (e) {
+      setError(e);
+    }
 
     
   }
@@ -84,6 +142,9 @@ export default function Home() {
         <input type="text" ref={inputRef} className='bg-white block text-black'></input>
         <button onClick={onClick} className='hover:text-red-500'>Set New Message</button>
       </div>
+        {
+          error && <div className='text-red-500 text-center text-sm'>{error}</div>
+        }
     </div>
   );
 }
